@@ -1,0 +1,12 @@
+# Reverse proxy: the only entry point. Routes /api to the API and everything else to the frontend.
+ARG CADDY_IMAGE=docker.io/library/caddy:2.10-alpine
+
+FROM ${CADDY_IMAGE}
+RUN chown -R nobody:nobody /config /data
+COPY deploy/proxy/Caddyfile /etc/caddy/Caddyfile
+
+ENV API_UPSTREAM=10.89.40.1:3100 \
+    WEB_UPSTREAM=web:3200
+
+EXPOSE 8080
+USER nobody

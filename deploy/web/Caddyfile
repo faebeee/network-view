@@ -1,0 +1,20 @@
+# Static file server for the React build. Only the reverse proxy talks to it
+# (it is not published in compose.yaml).
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:3200 {
+	root * /srv
+	encode zstd gzip
+
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+
+	# Single page app: unknown paths are handled by the client-side router.
+	try_files {path} /index.html
+	file_server
+}

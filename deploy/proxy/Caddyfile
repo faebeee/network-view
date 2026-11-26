@@ -1,0 +1,28 @@
+# Reverse proxy in front of the web and api containers.
+# The host port is chosen in compose.yaml (PROXY_PORT); inside the container Caddy listens on 8080.
+#   API_UPSTREAM  host:port of the API (default 10.89.40.1:3100, the edge network gateway)
+#   WEB_UPSTREAM  host:port of the frontend container (default web:3200)
+{
+	# No admin API and no automatic HTTPS: plain HTTP proxy.
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:10.89.40.1:3100} {
+			# Forward server-sent events (live scan updates) immediately.
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy {$WEB_UPSTREAM:web:3200}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

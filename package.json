@@ -11,7 +11,10 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "container:up": "podman compose up --build -d",
+    "container:down": "podman compose down",
+    "container:logs": "podman compose logs -f"
   },
   "devDependencies": {
     "turbo": "^2.11.13",

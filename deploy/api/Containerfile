@@ -1,0 +1,41 @@
+# NestJS API. Runs on the host network so it can scan the host's LAN.
+ARG NODE_IMAGE=docker.io/library/node:24-trixie-slim
+ARG TURBO_VERSION=2.11.13
+
+# 1. Reduce the monorepo to the backend and the packages it depends on.
+FROM ${NODE_IMAGE} AS prune
+ARG TURBO_VERSION
+WORKDIR /repo
+RUN npm install --global turbo@${TURBO_VERSION}
+COPY . .
+RUN turbo prune @network-view/backend --docker
+
+# 2. Install all dependencies and build backend + contracts.
+FROM ${NODE_IMAGE} AS build
+WORKDIR /repo
+COPY --from=prune /repo/out/json/ .
+RUN npm ci
+COPY --from=prune /repo/out/full/ .
+RUN npx turbo run build --filter=@network-view/backend
+
+# 3. Runtime: production dependencies, build output and the network tools the probes call.
+FROM ${NODE_IMAGE} AS runtime
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends iputils-ping iproute2 libcap2-bin \
+  # Lets the unprivileged user send ICMP echo requests (needs CAP_NET_RAW in the bounding set).
+  && setcap cap_net_raw+ep /usr/bin/ping \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    HOST=127.0.0.1 \
+    PORT=3100
+
+COPY --from=prune /repo/out/json/ .
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=build /repo/packages/contracts/dist packages/contracts/dist
+COPY --from=build /repo/apps/backend/dist apps/backend/dist
+
+EXPOSE 3100
+USER node
+CMD ["node", "apps/backend/dist/main.js"]

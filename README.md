@@ -26,6 +26,46 @@ Ports can be changed with `PORT` / `HOST` (backend) and `API_URL` (frontend dev 
 
 > The API binds to `127.0.0.1` by default because it runs network scans and has no authentication. Only scan networks you are allowed to scan.
 
+## Running in Podman
+
+The app runs as three containers, started together with `podman compose` (`compose.yaml`):
+
+```
+browser -> host :PROXY_PORT (published)
+              -> proxy :8080 ---+-- /api/* --> api  EDGE_GATEWAY:API_PORT   (host network)
+                 [edge network] +-- /*     --> web  web:3200                [edge network]
+```
+
+| Container | Containerfile                | Network        | Role                                                                    |
+| --------- | ---------------------------- | -------------- | ----------------------------------------------------------------------- |
+| `proxy`   | `deploy/proxy/Containerfile` | `edge` bridge  | Caddy reverse proxy. The only container with a published port            |
+| `web`     | `deploy/web/Containerfile`   | `edge` bridge  | Caddy serving the React build (SPA fallback, compression, asset caching) |
+| `api`     | `deploy/api/Containerfile`   | host           | NestJS API with `ping` and `iproute2`, runs as the unprivileged `node` user |
+
+```bash
+cp .env.example .env          # optional: adjust the variables below
+npm run container:up          # = podman compose up --build -d
+# open http://localhost:8080 (or http://<host>:<PROXY_PORT>)
+npm run container:logs
+npm run container:down
+```
+
+| Variable       | Default         | Description                                                                 |
+| -------------- | --------------- | --------------------------------------------------------------------------- |
+| `PROXY_PORT`   | `8080`          | Host port the proxy is published on                                         |
+| `PROXY_BIND`   | `0.0.0.0`       | Host address the port is published on (`127.0.0.1` = only this machine)    |
+| `API_PORT`     | `3100`          | Port of the API on the edge gateway address                                 |
+| `EDGE_SUBNET`  | `10.89.40.0/24` | Subnet of the bridge network shared by proxy and web                        |
+| `EDGE_GATEWAY` | `10.89.40.1`    | Gateway of that network; the API listens here                               |
+
+Why the API uses the host network: it needs the host's interfaces, ARP cache and default route to scan the LAN. It listens on the edge network's gateway address, which exists only on the host. The proxy can reach it there, the LAN cannot. The web container is not published either, so the proxy is the only way in.
+
+All capabilities are dropped except `NET_RAW` (api, for ping) and `NET_BIND_SERVICE` (proxy and web, needed by the Caddy binary).
+
+> **Rootful Podman required.** With rootless Podman the bridge network lives in a separate namespace, so the API cannot listen on its gateway. `podman machine` (macOS/Windows) is rootful by default; on Linux run `sudo podman compose up --build -d`.
+
+> **macOS and Windows:** Podman runs containers inside a Linux VM. The app is reachable on `localhost:PROXY_PORT`, but "host network" is the VM's network (e.g. `192.168.127.0/24`), not your LAN, so scans only see the VM. To scan your LAN, run the containers on a Linux host or run the app without containers (`npm run dev`).
+
 ## Repository layout
 
 ```
@@ -56,6 +96,8 @@ apps/
       shared/                  UI kit, HTTP client, formatting helpers
 packages/
   contracts/                   API types and zod schemas shared by backend and frontend
+deploy/                        api/, web/, proxy/: Containerfile (+ Caddyfile) per container
+compose.yaml                   Podman setup (host network, reverse proxy)
 ```
 
 ## How network discovery works

@@ -1,6 +1,7 @@
 import { parseBsdRoute, parseIpRoute, parseWindowsRoute } from './gateway.resolver.js';
 import { parsePingLatency, pingArgs } from './icmp.probe.js';
 import { parseBsdArp, parseProcNetArp, parseWindowsArp } from './neighbor-table.js';
+import { isScannableInterface } from './network-interfaces.provider.js';
 
 describe('neighbour table parsers', () => {
   it('parses macOS arp -an output', () => {
@@ -68,5 +69,21 @@ describe('ping helpers', () => {
     expect(parsePingLatency('64 bytes from 10.0.0.1: icmp_seq=0 ttl=64 time=3.412 ms')).toBe(3.412);
     expect(parsePingLatency('Reply from 10.0.0.1: bytes=32 time<1ms TTL=64')).toBe(1);
     expect(parsePingLatency('Request timeout')).toBeNull();
+  });
+});
+
+describe('isScannableInterface', () => {
+  it('keeps physical interfaces', () => {
+    expect(isScannableInterface('en0', '192.168.1.10')).toBe(true);
+    expect(isScannableInterface('eth0', '10.0.0.2')).toBe(true);
+    expect(isScannableInterface('wlp3s0', '10.0.0.3')).toBe(true);
+  });
+
+  it('skips container bridges, tunnels and link-local addresses', () => {
+    expect(isScannableInterface('podman7', '10.89.40.1')).toBe(false);
+    expect(isScannableInterface('docker0', '172.17.0.1')).toBe(false);
+    expect(isScannableInterface('br-1a2b3c', '172.18.0.1')).toBe(false);
+    expect(isScannableInterface('veth12ab', '10.88.0.5')).toBe(false);
+    expect(isScannableInterface('en0', '169.254.10.20')).toBe(false);
   });
 });
