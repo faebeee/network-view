@@ -1,0 +1,16 @@
+.callout {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+}
+
+.info {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
+}
